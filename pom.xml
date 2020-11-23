@@ -16,8 +16,20 @@
         <scala.compat.version>2.11</scala.compat.version>
         <spec2.version>4.2.0</spec2.version>
         <spark.version>2.4.0</spark.version>
-        <hive.version>2.1.1</hive.version>
+        <hive.version>2.1.1-cdh6.3.2</hive.version>
     </properties>
+    <repositories>
+        <repository>
+            <id>cloudera</id>
+            <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <dependencies>
         <dependency>
