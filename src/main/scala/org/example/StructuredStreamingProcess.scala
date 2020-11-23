@@ -1,5 +1,7 @@
 package org.example
 
+import java.util.{Collections, UUID}
+
 import com.alibaba.fastjson.JSON
 import org.apache.hudi.DataSourceWriteOptions
 import org.apache.hudi.common.model.HoodieTableType
@@ -8,8 +10,9 @@ import org.apache.hudi.index.HoodieIndex
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryListener}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.example.dingTalk.Monitoring
 
 import scala.beans.BeanProperty
 
@@ -25,7 +28,7 @@ object StructuredStreamingProcess {
    * @return [[SparkSession]]
    */
   def getSparkSession: SparkSession = {
-    SparkSession.builder().appName("structured_streaming_hudi_hive")
+    val sparkSession: SparkSession = SparkSession.builder().appName("structured_streaming_hudi_hive")
       .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .config("spark.streaming.receiver.maxRate", "1024")
       .config("spark.streaming.kafka.maxRatePerPartition", "256")
@@ -36,6 +39,41 @@ object StructuredStreamingProcess {
       .config("spark.sql.shuffle.partitions", "2")
       .enableHiveSupport()
       .getOrCreate()
+    sparkSession.streams.addListener(new StreamingQueryListener {
+      override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
+        //结构化流启动的时候异步回调
+      }
+
+      override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
+        //查询过程中的状态发生更新时候的异步回调
+      }
+
+      override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
+        val runId: UUID = event.runId
+        val exception: String = event.exception.getOrElse("error")
+        if (exception.equalsIgnoreCase("error")) {
+          val sc: SparkContext = sparkSession.sparkContext
+          val text: String =
+            s"""
+               |### Structured Streaming HUDI Hive \n
+               |> sparkUser: ${sc.sparkUser}  \n
+               |> startTime: ${sc.startTime}  \n
+               |> appName: ${sc.appName}  \n
+               |> deployMode: ${sc.deployMode}  \n
+               |> master: ${sc.master}  \n
+               |>> uiWebUrl: ${sc.uiWebUrl.get}  \n
+               |> applicationId: ${sc.applicationId}  \n
+               |>> runId: $runId \n
+               |>> exception: $exception \n
+               |>> @18621771210
+               |""".stripMargin
+          logger.error(exception)
+          Monitoring.sendMarkdown("Structured Streaming Monitoring", text,
+            Collections.singletonList("18621771210"), isAtAll = false)
+        }
+      }
+    })
+    sparkSession
   }
 
   /**
@@ -79,26 +117,26 @@ object StructuredStreamingProcess {
       .writeStream
       .queryName("ax_user")
       .foreachBatch((batchDF: DataFrame, _: Long) => {
-        //        if (!batchDF.isEmpty) {
-        batchDF.write.format("org.apache.hudi")
-          .option("hoodie.insert.shuffle.parallelism", "2")
-          .option("hoodie.upsert.shuffle.parallelism", "2")
-          .option(DataSourceWriteOptions.TABLE_TYPE_OPT_KEY, HoodieTableType.MERGE_ON_READ.name) // 配置读时合并
-          .option(DataSourceWriteOptions.RECORDKEY_FIELD_OPT_KEY, "ax_uid") // 唯一id列名，可以指定多个字段
-          .option(DataSourceWriteOptions.PRECOMBINE_FIELD_OPT_KEY, "kafka_timestamp") //指定更新字段，该字段数值大的会覆盖小的
-          .option(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY, "partition_date") // 指定 partitionpath
-          .option(DataSourceWriteOptions.HIVE_SYNC_ENABLED_OPT_KEY, "true") // 设置数据集注册并同步到hive
-          .option(DataSourceWriteOptions.HIVE_DATABASE_OPT_KEY, "ods") // hive database
-          .option(DataSourceWriteOptions.HIVE_TABLE_OPT_KEY, "ax_user") // hive table
-          .option(DataSourceWriteOptions.HIVE_PARTITION_FIELDS_OPT_KEY, "partition_date") // hive表分区字段
-          .option(DataSourceWriteOptions.HIVE_URL_OPT_KEY, "jdbc:hive2://172.16.112.76:10000") // hiveserver2 地址
-          .option(DataSourceWriteOptions.HIVE_PARTITION_EXTRACTOR_CLASS_OPT_KEY, "org.apache.hudi.hive.MultiPartKeysValueExtractor") // 从partitionpath中提取hive分区对应的值，MultiPartKeysValueExtractor使用的是"/"分割
-          .option(HoodieIndexConfig.BLOOM_INDEX_UPDATE_PARTITION_PATH, "true") // 当前数据的分区变更时，数据的分区目录是否变化
-          .option(HoodieIndexConfig.INDEX_TYPE_PROP, HoodieIndex.IndexType.GLOBAL_BLOOM.name()) //设置索引类型目前有HBASE,INMEMORY,BLOOM,GLOBAL_BLOOM 四种索引 为了保证分区变更后能找到必须设置全局GLOBAL_BLOOM
-          .option(HoodieWriteConfig.TABLE_NAME, "ax_user") // hudi table名
-          .mode(SaveMode.Append)
-          .save("/user/hive/warehouse/ods.db/ax_user")
-        //        }
+        if (!batchDF.isEmpty) {
+          batchDF.write.format("org.apache.hudi")
+            .option("hoodie.insert.shuffle.parallelism", "2")
+            .option("hoodie.upsert.shuffle.parallelism", "2")
+            .option(DataSourceWriteOptions.TABLE_TYPE_OPT_KEY, HoodieTableType.MERGE_ON_READ.name) // 配置读时合并
+            .option(DataSourceWriteOptions.RECORDKEY_FIELD_OPT_KEY, "ax_uid") // 唯一id列名，可以指定多个字段
+            .option(DataSourceWriteOptions.PRECOMBINE_FIELD_OPT_KEY, "kafka_timestamp") //指定更新字段，该字段数值大的会覆盖小的
+            .option(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY, "partition_date") // 指定 partitionpath
+            .option(DataSourceWriteOptions.HIVE_SYNC_ENABLED_OPT_KEY, "true") // 设置数据集注册并同步到hive
+            .option(DataSourceWriteOptions.HIVE_DATABASE_OPT_KEY, "ods") // hive database
+            .option(DataSourceWriteOptions.HIVE_TABLE_OPT_KEY, "ax_user") // hive table
+            .option(DataSourceWriteOptions.HIVE_PARTITION_FIELDS_OPT_KEY, "partition_date") // hive表分区字段
+            .option(DataSourceWriteOptions.HIVE_URL_OPT_KEY, "jdbc:hive2://172.16.112.76:10000") // hiveserver2 地址
+            .option(DataSourceWriteOptions.HIVE_PARTITION_EXTRACTOR_CLASS_OPT_KEY, "org.apache.hudi.hive.MultiPartKeysValueExtractor") // 从partitionpath中提取hive分区对应的值，MultiPartKeysValueExtractor使用的是"/"分割
+            .option(HoodieIndexConfig.BLOOM_INDEX_UPDATE_PARTITION_PATH, "true") // 当前数据的分区变更时，数据的分区目录是否变化
+            .option(HoodieIndexConfig.INDEX_TYPE_PROP, HoodieIndex.IndexType.GLOBAL_BLOOM.name()) //设置索引类型目前有HBASE,INMEMORY,BLOOM,GLOBAL_BLOOM 四种索引 为了保证分区变更后能找到必须设置全局GLOBAL_BLOOM
+            .option(HoodieWriteConfig.TABLE_NAME, "ax_user") // hudi table名
+            .mode(SaveMode.Append)
+            .save("/user/hive/warehouse/ods.db/ax_user")
+        }
       }).option("checkpointLocation", "/checkpoint/structStreaming/structured_streaming_hudi_hive/")
       .start()
   }
@@ -120,8 +158,8 @@ object StructuredStreamingProcess {
          |> applicationId: ${sc.applicationId}  \n
          |>> @18621771210
          |""".stripMargin
-    //    Monitoring.sendMarkdown("Structured Streaming Monitoring", text,
-    //      Collections.singletonList("18621771210"), isAtAll = false)
+    Monitoring.sendMarkdown("Structured Streaming Monitoring", text,
+      Collections.singletonList("18621771210"), isAtAll = false)
 
     val streamingQuery: StreamingQuery = query(dataFrame, session)
     streamingQuery.awaitTermination()
