@@ -18,7 +18,19 @@
         <spark.version>2.4.0</spark.version>
         <hive.version>2.1.1-cdh6.3.2</hive.version>
     </properties>
+
     <repositories>
+        <repository>
+            <id>sonatype-nexus-staging</id>
+            <name>Sonatype Nexus Staging</name>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
         <repository>
             <id>cloudera</id>
             <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
@@ -86,6 +98,13 @@
             <artifactId>fastjson</artifactId>
             <version>1.2.74</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>alibaba-dingtalk-service-sdk</artifactId>
+            <version>1.0.1</version>
+        </dependency>
+
     </dependencies>
 
     <build>
