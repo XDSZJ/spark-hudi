@@ -15,6 +15,7 @@ import scala.beans.BeanProperty
 
 object StructuredStreamingProcess {
   Logger.getLogger("org").setLevel(Level.WARN)
+  Logger.getLogger("javalin").setLevel(Level.ERROR)
   Logger.getLogger("hive").setLevel(Level.WARN)
   private final val logger: Logger = Logger.getLogger(this.getClass)
 
@@ -78,26 +79,26 @@ object StructuredStreamingProcess {
       .writeStream
       .queryName("ax_user")
       .foreachBatch((batchDF: DataFrame, _: Long) => {
-        if (!batchDF.isEmpty) {
-          batchDF.write.format("org.apache.hudi")
-            .option("hoodie.insert.shuffle.parallelism", "2")
-            .option("hoodie.upsert.shuffle.parallelism", "2")
-            .option(DataSourceWriteOptions.TABLE_TYPE_OPT_KEY, HoodieTableType.MERGE_ON_READ.name) // 配置读时合并
-            .option(DataSourceWriteOptions.RECORDKEY_FIELD_OPT_KEY, "ax_uid") // 唯一id列名，可以指定多个字段
-            .option(DataSourceWriteOptions.PRECOMBINE_FIELD_OPT_KEY, "kafka_timestamp") //指定更新字段，该字段数值大的会覆盖小的
-            .option(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY, "partition_date") // 指定 partitionpath
-            .option(DataSourceWriteOptions.HIVE_SYNC_ENABLED_OPT_KEY, "true") // 设置数据集注册并同步到hive
-            .option(DataSourceWriteOptions.HIVE_DATABASE_OPT_KEY, "ods") // hive database
-            .option(DataSourceWriteOptions.HIVE_TABLE_OPT_KEY, "ax_user") // hive table
-            .option(DataSourceWriteOptions.HIVE_PARTITION_FIELDS_OPT_KEY, "partition_date") // hive表分区字段
-            .option(DataSourceWriteOptions.HIVE_URL_OPT_KEY, "jdbc:hive2://172.16.112.72:10000") // hiveserver2 地址
-            .option(DataSourceWriteOptions.HIVE_PARTITION_EXTRACTOR_CLASS_OPT_KEY, "org.apache.hudi.hive.MultiPartKeysValueExtractor") // 从partitionpath中提取hive分区对应的值，MultiPartKeysValueExtractor使用的是"/"分割
-            .option(HoodieIndexConfig.BLOOM_INDEX_UPDATE_PARTITION_PATH, "true") // 当前数据的分区变更时，数据的分区目录是否变化
-            .option(HoodieIndexConfig.INDEX_TYPE_PROP, HoodieIndex.IndexType.GLOBAL_BLOOM.name()) //设置索引类型目前有HBASE,INMEMORY,BLOOM,GLOBAL_BLOOM 四种索引 为了保证分区变更后能找到必须设置全局GLOBAL_BLOOM
-            .option(HoodieWriteConfig.TABLE_NAME, "ax_user") // hudi table名
-            .mode(SaveMode.Append)
-            .save("/user/hive/warehouse/ods.db/ax_user")
-        }
+        //        if (!batchDF.isEmpty) {
+        batchDF.write.format("org.apache.hudi")
+          .option("hoodie.insert.shuffle.parallelism", "2")
+          .option("hoodie.upsert.shuffle.parallelism", "2")
+          .option(DataSourceWriteOptions.TABLE_TYPE_OPT_KEY, HoodieTableType.MERGE_ON_READ.name) // 配置读时合并
+          .option(DataSourceWriteOptions.RECORDKEY_FIELD_OPT_KEY, "ax_uid") // 唯一id列名，可以指定多个字段
+          .option(DataSourceWriteOptions.PRECOMBINE_FIELD_OPT_KEY, "kafka_timestamp") //指定更新字段，该字段数值大的会覆盖小的
+          .option(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY, "partition_date") // 指定 partitionpath
+          .option(DataSourceWriteOptions.HIVE_SYNC_ENABLED_OPT_KEY, "true") // 设置数据集注册并同步到hive
+          .option(DataSourceWriteOptions.HIVE_DATABASE_OPT_KEY, "ods") // hive database
+          .option(DataSourceWriteOptions.HIVE_TABLE_OPT_KEY, "ax_user") // hive table
+          .option(DataSourceWriteOptions.HIVE_PARTITION_FIELDS_OPT_KEY, "partition_date") // hive表分区字段
+          .option(DataSourceWriteOptions.HIVE_URL_OPT_KEY, "jdbc:hive2://172.16.112.76:10000") // hiveserver2 地址
+          .option(DataSourceWriteOptions.HIVE_PARTITION_EXTRACTOR_CLASS_OPT_KEY, "org.apache.hudi.hive.MultiPartKeysValueExtractor") // 从partitionpath中提取hive分区对应的值，MultiPartKeysValueExtractor使用的是"/"分割
+          .option(HoodieIndexConfig.BLOOM_INDEX_UPDATE_PARTITION_PATH, "true") // 当前数据的分区变更时，数据的分区目录是否变化
+          .option(HoodieIndexConfig.INDEX_TYPE_PROP, HoodieIndex.IndexType.GLOBAL_BLOOM.name()) //设置索引类型目前有HBASE,INMEMORY,BLOOM,GLOBAL_BLOOM 四种索引 为了保证分区变更后能找到必须设置全局GLOBAL_BLOOM
+          .option(HoodieWriteConfig.TABLE_NAME, "ax_user") // hudi table名
+          .mode(SaveMode.Append)
+          .save("/user/hive/warehouse/ods.db/ax_user")
+        //        }
       }).option("checkpointLocation", "/checkpoint/structStreaming/structured_streaming_hudi_hive/")
       .start()
   }
